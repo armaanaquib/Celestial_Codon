@@ -1,0 +1,440 @@
+<!--
+  Celestial Codon — Main HTML Template
+  ======================================
+  Single-page application layout served by Flask (Jinja2 template).
+
+  Page Structure:
+  ├── <nav class="topbar">        — Fixed top bar: brand logo, export buttons, theme toggle
+  ├── .loading-overlay            — Full-screen loading animation shown during analysis
+  ├── <aside class="sidebar">     — Left navigation: tabs grouped by Input / Analysis / Lab Tools / Insights
+  └── <main class="main-content"> — Tab content panels (only one visible at a time)
+      ├── #tab-input              — DNA sequence input box, sample loaders, advanced options
+      ├── #tab-overview           — Stats (length, GC, AT, Tm), sequence viewer, AI preview, restriction sites
+      ├── #tab-orfs               — 6-frame ORF canvas map + ORF list
+      ├── #tab-protein            — Protein stats, hydrophobic domain map, amino acid composition
+      ├── #tab-secondary          — CpG islands + secondary structure prediction
+      ├── #tab-codons             — Codon bias comparison table vs reference organism
+      ├── #tab-motifs             — Motif library scan results
+      ├── #tab-charts             — Matplotlib charts (nucleotide freq, GC window, hydrophobicity, circular map)
+      ├── #tab-tools              — Primer design, restriction digest simulator, PCR predictor
+      ├── #tab-mutate             — Point mutation simulator + disease association lookup
+      ├── #tab-aiinsights         — AI insight cards + Ask AI input box
+      └── #tab-eli5               — Plain language explanations + quiz
+
+  Floating Elements:
+  ├── .ai-fab                     — Circular floating button (bottom-right) to open AI chat
+  └── .ai-chat-panel              — Armaani AI assistant chat panel
+
+  JavaScript: /static/app.js
+  Styles:     /static/style.css
+-->
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+  <title>Celestial Codon — DNA Analysis Platform</title>
+  <link rel="stylesheet" href="/static/style.css"/>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link href="https://fonts.googleapis.com/css2?family=Dancing+Script:wght@600&display=swap" rel="stylesheet"/>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>&#x1F9EC;</text></svg>"/>
+</head>
+<body>
+
+<nav class="topbar">
+  <a class="topbar-brand" href="#" onclick="showTab('input',null);return false;">
+    <div class="brand">
+      <div class="brand-text">
+        <span class="brand-main"><span class="brand-word1">Celestial</span> <span class="brand-word2">Codon</span></span>
+        <span class="brand-sub">DNA Intelligence Platform</span>
+      </div>
+    </div>
+  </a>
+  <div class="topbar-spacer"></div>
+  <div class="topbar-actions">
+    <div id="exportRow" style="display:none" class="export-group">
+      <button class="btn-export" onclick="exportXlsx()">Excel</button>
+      <button class="btn-export" onclick="exportFasta()">FASTA</button>
+      <button class="btn-export" onclick="exportJson()">JSON</button>
+    </div>
+    <button class="btn-theme" onclick="toggleTheme()" id="themeBtn">Light</button>
+  </div>
+</nav>
+
+<!-- Loading overlay -->
+<div class="loading-overlay" id="loadingOverlay">
+  <div class="loading-spinner-lg"></div>
+  <div class="loading-title">Analyzing Sequence</div>
+  <div class="loading-step" id="loadingStep">Preparing...</div>
+  <div class="loading-bar-wrap">
+    <div class="loading-bar-fill" id="loadingBar"></div>
+  </div>
+</div>
+
+<div class="app-layout">
+
+  <aside class="sidebar">
+    <div class="nav-section">
+      <div class="nav-section-label">Input</div>
+      <button class="nav-item active" onclick="showTab('input', this)">Sequence Input</button>
+    </div>
+    <div class="nav-section" id="analysisNav" style="display:none">
+      <div class="nav-section-label">Analysis</div>
+      <button class="nav-item" onclick="showTab('overview', this)">Overview</button>
+      <button class="nav-item" onclick="showTab('orfs', this)">6-Frame ORFs</button>
+      <button class="nav-item" onclick="showTab('protein', this)">Protein</button>
+      <button class="nav-item" onclick="showTab('secondary', this)">Structure</button>
+      <button class="nav-item" onclick="showTab('codons', this)">Codon Bias</button>
+      <button class="nav-item" onclick="showTab('motifs', this)">Motifs</button>
+      <button class="nav-item" onclick="showTab('charts', this)">Charts</button>
+    </div>
+    <div class="nav-section" id="labNav" style="display:none">
+      <div class="nav-section-label">Lab Tools</div>
+      <button class="nav-item" onclick="showTab('tools', this)">Lab Tools</button>
+      <button class="nav-item" onclick="showTab('mutate', this)">Mutator</button>
+    </div>
+    <div class="nav-section" id="insightsNav" style="display:none">
+      <div class="nav-section-label">Insights</div>
+      <button class="nav-item" onclick="showTab('aiinsights', this)">AI Insights</button>
+      <button class="nav-item" onclick="showTab('eli5', this)">ELI5</button>
+    </div>
+  </aside>
+
+  <main class="main-content">
+    <div id="error" class="error-box hidden" style="max-width:1100px;margin:0 auto;padding:24px 24px 0"></div>
+
+    <!-- INPUT -->
+    <div id="tab-input" class="tab-content">
+      <div class="content-wrap">
+      <div class="input-page">
+        <div class="input-page-header">
+          <h1 class="hero-title">Decode DNA. Discover Insights.</h1>
+          <p class="hero-subtitle">Analyze, interpret, and extract meaning from genetic sequences</p>
+        </div>
+        <div class="input-box">
+          <label class="field-label">DNA Sequence <span class="field-hint">(A T C G only)</span></label>
+          <textarea id="seq" rows="7" placeholder="Paste your DNA sequence here..."></textarea>
+          <div class="samples-row">
+            <span class="samples-label">Load sample:</span>
+            <button class="chip" onclick="loadSample('ATGCTTACGGAATGCAGTAAGAATTCGGATCCATGAAATAA')">Short (41 bp)</button>
+            <button class="chip" onclick="loadSample('ATGAAAGCAATTTTCGTACTGAAAGGTTTTGTTGGTTTTTTAAAGTAAGAATTCGGATCCATGCTTACGGAATGCAGTAA')">Medium (80 bp)</button>
+            <button class="chip" onclick="loadSample('ATGGTGAGCAAGGGCGAGGAGCTGTTCACCGGGGTGGTGCCCATCCTGGTCGAGCTGGACGGCGACGTAAACGGCCACAAGTTCAGCGTGTCCGGCGAGGGCGAGGGCGATGCCACCTACGGCAAGCTGACCCTGAAGTTCATCTGCACCACCGGCAAGCTGCCCGTGCCCTGGCCCACCCTCGTGACCACCCTGACCTACGGCGTGCAGTGCTTCAGCCGCTACCCCGACCACATGAAGCAGCACGACTTCTTCAAGTCCGCCATGCCCGAAGGCTACGTCCAGGAGCGCACCATCTTCTTCAAGGACGACGGCAACTACAAGACCCGCGCCGAGGTGAAGTTCGAGGGCGACACCCTGGTGAACCGCATCGAGCTGAAGGGCATCGACTTCAAGGAGGACGGCAACATCCTGGGGCACAAGCTGGAGTACAACTACAACAGCCACAACGTCTATATCATGGCCGACAAGCAGAAGAACGGCATCAAGGTGAACTTCAAGATCCGCCACAACATCGAGGACGGCAGCGTGCAGCTCGCCGACCACTACCAGCAGAACACCCCCATCGGCGACGGCCCCGTGCTGCTGCCCGACAACCACTACCTGAGCACCCAGTCCGCCCTGAGCAAAGACCCCAACGAGAAGCGCGATCACATGGTCCTGCTGGAGTTCGTGACCGCCGCCGGGATCACTCTCGGCATGGACGAGCTGTACAAGTAA')">GFP Gene (720 bp)</button>
+          </div>
+          <div class="adv-toggle" onclick="toggleAdvanced()">
+            <svg id="advArrowSvg" viewBox="0 0 16 16" fill="currentColor" width="12" height="12"><path d="M6 4l4 4-4 4"/></svg>
+            Advanced Options
+          </div>
+          <div class="adv-panel hidden" id="advPanel">
+            <div class="adv-grid">
+              <div>
+                <label class="field-label">Motif Search <span class="field-hint">(optional)</span></label>
+                <input id="motif" type="text" placeholder="e.g. ATG"/>
+              </div>
+              <div>
+                <label class="field-label">Codon Bias Reference</label>
+                <select id="organism">
+                  <option value="ecoli">E. coli K12</option>
+                  <option value="human">Human</option>
+                  <option value="yeast">S. cerevisiae</option>
+                </select>
+              </div>
+            </div>
+          </div>
+          <button class="btn-analyze" id="analyzeBtn" onclick="analyze()">Analyze Sequence</button>
+          <p class="shortcut-hint">Ctrl + Enter</p>
+        </div>
+
+      </div>
+      </div><!-- /content-wrap -->
+    </div><!-- /tab-input -->
+
+    <!-- OVERVIEW -->
+    <div id="tab-overview" class="tab-content hidden">
+      <div class="content-wrap">
+      <div class="page-header">
+        <h2 class="page-title">Sequence Overview</h2>
+        <p class="page-subtitle" id="overview-subtitle"></p>
+      </div>
+      <div class="stats-row">
+        <div class="stat-card"><div class="stat-val" id="r-length">—</div><div class="stat-label">Length (bp)</div></div>
+        <div class="stat-card"><div class="stat-val gc" id="r-gc">—</div><div class="stat-label">GC Content</div></div>
+        <div class="stat-card"><div class="stat-val at" id="r-at">—</div><div class="stat-label">AT Content</div></div>
+        <div class="stat-card"><div class="stat-val tm" id="r-tm">—</div><div class="stat-label">Melting Temp (°C)</div></div>
+      </div>
+      <div class="ai-preview" id="aiPreview">
+        <div class="ai-preview-header">
+          <span class="ai-preview-title">AI Insights</span>
+          <button class="btn-link" onclick="showTabByName('aiinsights')">View full analysis</button>
+        </div>
+        <div id="r-aiPreview"></div>
+      </div>
+      <div class="card">
+        <div class="card-header"><span class="card-title">Sequence Viewer</span><span class="card-hint">Color-coded by base</span></div>
+        <div class="seq-legend">
+          <span><span class="dot" style="background:#22c55e"></span>A</span>
+          <span><span class="dot" style="background:#f97316"></span>T</span>
+          <span><span class="dot" style="background:#3b82f6"></span>C</span>
+          <span><span class="dot" style="background:#a855f7"></span>G</span>
+        </div>
+        <div id="r-seqviewer" class="seq-viewer"></div>
+      </div>
+      <div class="two-col">
+        <div class="card">
+          <div class="card-header"><span class="card-title">Nucleotide Frequency</span></div>
+          <div class="freq-bars" id="r-freq"></div>
+        </div>
+        <div class="card">
+          <div class="card-header"><span class="card-title">Sequence Transformations</span></div>
+          <div class="seq-block"><div class="seq-block-label">Reverse Complement</div><code id="r-rc"></code></div>
+          <div class="seq-block"><div class="seq-block-label">mRNA Transcript</div><code id="r-rna"></code></div>
+          <div class="seq-block"><div class="seq-block-label">Protein</div><code id="r-protein" class="protein"></code></div>
+        </div>
+      </div>
+      <div class="card" id="motif-card" style="display:none">
+        <div class="card-header"><span class="card-title">Motif Search Result</span></div>
+        <div id="r-motif"></div>
+      </div>
+      <div class="two-col">
+        <div class="card">
+          <div class="card-header"><span class="card-title">Restriction Sites</span></div>
+          <div id="r-restriction"></div>
+        </div>
+        <div class="card">
+          <div class="card-header"><span class="card-title">Palindromes / Hairpins</span></div>
+          <div id="r-palindromes"></div>
+        </div>
+      </div>
+      </div>
+    </div><!-- /tab-overview -->
+
+    <!-- ORFs -->
+    <div id="tab-orfs" class="tab-content hidden">
+      <div class="content-wrap">
+      <div class="page-header"><h2 class="page-title">6-Frame ORF Analysis</h2><p class="page-subtitle">Open reading frames across all 3 forward and 3 reverse frames</p></div>
+      <div class="card">
+        <div class="card-header"><span class="card-title">ORF Map</span><span class="card-hint">Each row = one reading frame</span></div>
+        <div class="orf-canvas-wrap"><canvas id="orfCanvas"></canvas></div>
+      </div>
+      <div class="card">
+        <div class="card-header"><span class="card-title">All ORFs</span></div>
+        <div id="r-orfs6"></div>
+      </div>
+      </div>
+    </div><!-- /tab-orfs -->
+
+    <!-- PROTEIN -->
+    <div id="tab-protein" class="tab-content hidden">
+      <div class="content-wrap">
+      <div class="page-header"><h2 class="page-title">Protein Analysis</h2><p class="page-subtitle">Properties of the translated protein from the primary ORF</p></div>
+      <div class="stats-row" id="r-protStats"></div>
+      <div class="two-col">
+        <div class="card">
+          <div class="card-header"><span class="card-title">Domain Map</span><span class="card-hint">Red = hydrophobic · Blue = hydrophilic</span></div>
+          <div id="r-domainMap" class="domain-map"></div>
+        </div>
+        <div class="card">
+          <div class="card-header"><span class="card-title">Amino Acid Composition</span></div>
+          <div class="aa-grid" id="r-aa"></div>
+        </div>
+      </div>
+      </div>
+    </div><!-- /tab-protein -->
+
+    <!-- STRUCTURE -->
+    <div id="tab-secondary" class="tab-content hidden">
+      <div class="content-wrap">
+      <div class="page-header"><h2 class="page-title">Structural Analysis</h2><p class="page-subtitle">CpG islands and Chou-Fasman secondary structure prediction</p></div>
+      <div class="card">
+        <div class="card-header"><span class="card-title">CpG Islands</span><span class="card-hint">High GC / CpG ratio regions — often near gene promoters</span></div>
+        <div id="r-cpg"></div>
+      </div>
+      <div class="card">
+        <div class="card-header">
+          <span class="card-title">Secondary Structure Prediction</span>
+          <span class="card-hint">
+            <span class="ss-H" style="padding:.1rem .4rem;border-radius:3px;font-size:.72rem;font-weight:600">H Helix</span>
+            <span class="ss-E" style="padding:.1rem .4rem;border-radius:3px;font-size:.72rem;font-weight:600;margin-left:.4rem">E Sheet</span>
+            <span class="ss-C" style="padding:.1rem .4rem;border-radius:3px;font-size:.72rem;font-weight:600;margin-left:.4rem">C Coil</span>
+          </span>
+        </div>
+        <div id="r-secondary" class="ss-viewer"></div>
+      </div>
+      </div>
+    </div><!-- /tab-secondary -->
+
+    <!-- CODON BIAS -->
+    <div id="tab-codons" class="tab-content hidden">
+      <div class="content-wrap">
+      <div class="page-header"><h2 class="page-title">Codon Usage Bias</h2><p class="page-subtitle">Sequence vs reference organism (per 1000 codons)</p></div>
+      <div class="card">
+        <div class="card-header"><span class="card-title">Codon Frequency Comparison</span></div>
+        <div class="bias-legend">
+          <span class="dot" style="background:#22c55e"></span> Higher than reference
+          <span class="dot" style="background:#f97316;margin-left:1rem"></span> Lower than reference
+        </div>
+        <table class="data-table">
+          <thead><tr><th>Codon</th><th>Amino Acid</th><th>Sequence</th><th>Reference</th><th style="width:120px">Difference</th><th>Delta</th></tr></thead>
+          <tbody id="r-codons"></tbody>
+        </table>
+      </div>
+      </div>
+    </div><!-- /tab-codons -->
+
+    <!-- MOTIFS -->
+    <div id="tab-motifs" class="tab-content hidden">
+      <div class="content-wrap">
+      <div class="page-header"><h2 class="page-title">Motif Library Scan</h2><p class="page-subtitle">Known promoter elements and transcription factor binding sites</p></div>
+      <div class="card">
+        <div class="card-header"><span class="card-title">Detected Motifs</span></div>
+        <p class="hint-p">Scans for TATA-box, Kozak, Shine-Dalgarno, CpG islands, NF-kB, SP1, AP1 and more.</p>
+        <div id="r-motiflib"></div>
+      </div>
+      </div>
+    </div><!-- /tab-motifs -->
+
+    <!-- CHARTS -->
+    <div id="tab-charts" class="tab-content hidden">
+      <div class="content-wrap">
+      <div class="page-header"><h2 class="page-title">Visualizations</h2><p class="page-subtitle">Nucleotide frequency, GC sliding window, hydrophobicity profile</p></div>
+      <div class="card">
+        <div class="card-header"><span class="card-title">Analysis Charts</span></div>
+        <img id="r-chart" src="" alt="Charts" class="chart-img"/>
+        <div class="chart-captions">
+          <div class="chart-caption"><span class="caption-dot" style="background:#22c55e"></span><strong>Nucleotide Frequency:</strong> Unequal A/T or G/C ratios may indicate strand bias or functional regions.</div>
+          <div class="chart-caption"><span class="caption-dot" style="background:#3b82f6"></span><strong>GC Sliding Window:</strong> Higher GC regions often indicate structural stability or coding sequences.</div>
+          <div class="chart-caption"><span class="caption-dot" style="background:#a855f7"></span><strong>Hydrophobicity Profile:</strong> Peaks above zero suggest potential membrane-spanning or signal peptide regions.</div>
+        </div>
+      </div>
+      <div class="card" id="circularCard" style="display:none">
+        <div class="card-header"><span class="card-title">Circular Genome Map</span></div>
+        <div style="text-align:center"><img id="r-circular" src="" alt="Circular map" style="max-width:440px;width:100%;border-radius:var(--radius)"/></div>
+      </div>
+      </div>
+    </div><!-- /tab-charts -->
+
+    <!-- LAB TOOLS -->
+    <div id="tab-tools" class="tab-content hidden">
+      <div class="content-wrap">
+      <div class="page-header"><h2 class="page-title">Lab Tools</h2><p class="page-subtitle">Primer design, restriction digest simulation, PCR prediction</p></div>
+      <div class="card">
+        <div class="card-header"><span class="card-title">Primer Design</span></div>
+        <div id="r-primers"></div>
+      </div>
+      <div class="card">
+        <div class="card-header"><span class="card-title">Restriction Digest Simulator</span></div>
+        <p class="hint-p">Select restriction enzymes:</p>
+        <div id="enzymeCheckboxes" class="enzyme-checks"></div>
+        <button class="btn-secondary" style="margin-top:.75rem" onclick="runDigest()">Run Digest</button>
+        <div id="r-digest" style="margin-top:1rem"></div>
+      </div>
+      <div class="card">
+        <div class="card-header"><span class="card-title">PCR Product Predictor</span></div>
+        <div class="tool-inputs">
+          <div><label class="field-label">Forward Primer (5'→3')</label><input id="pcrFwd" type="text" placeholder="e.g. ATGCTTACGGAATGCAGT"/></div>
+          <div><label class="field-label">Reverse Primer (5'→3')</label><input id="pcrRev" type="text" placeholder="e.g. TTATTTCATGGATCCGAA"/></div>
+          <button class="btn-secondary" onclick="runPCR()">Predict</button>
+        </div>
+        <div id="r-pcr" style="margin-top:1rem"></div>
+      </div>
+      </div>
+    </div><!-- /tab-tools -->
+
+    <!-- MUTATOR -->
+    <div id="tab-mutate" class="tab-content hidden">
+      <div class="content-wrap">
+      <div class="page-header"><h2 class="page-title">Mutation Simulator</h2><p class="page-subtitle">Introduce a point mutation and observe the impact on protein translation</p></div>
+      <div class="card">
+        <div class="card-header"><span class="card-title">Point Mutation</span></div>
+        <div class="mut-inputs">
+          <div><label class="field-label">Position (1-based)</label><input id="mutPos" type="number" min="1" placeholder="e.g. 3"/></div>
+          <div><label class="field-label">New Base</label><select id="mutBase"><option>A</option><option>T</option><option>C</option><option>G</option></select></div>
+          <button class="btn-secondary" onclick="runMutation()">Simulate</button>
+        </div>
+        <div id="r-mutation" style="margin-top:1.25rem"></div>
+        <div id="r-mutSeqCompare" class="hidden" style="margin-top:1.25rem">
+          <div class="seq-compare-header">Sequence Comparison</div>
+          <div class="seq-block"><div class="seq-block-label">Original</div><div id="r-origSeq" class="seq-viewer" style="max-height:80px"></div></div>
+          <div class="seq-block"><div class="seq-block-label">Mutated</div><div id="r-mutSeq" class="seq-viewer" style="max-height:80px"></div></div>
+        </div>
+      </div>
+      <div class="card" id="diseaseCard" style="display:none">
+        <div class="card-header"><span class="card-title">Disease Association Lookup</span><span class="card-hint">MyVariant.info · ClinVar · dbSNP</span></div>
+        <p class="hint-p">Query external databases for known disease associations with this variant.</p>
+        <button class="btn-secondary" id="diseaseBtn" onclick="runDiseaseLookup()">Query External Database</button>
+        <div id="r-disease" style="margin-top:1rem"></div>
+      </div>
+      </div>
+    </div><!-- /tab-mutate -->
+
+    <!-- AI INSIGHTS -->
+    <div id="tab-aiinsights" class="tab-content hidden">
+      <div class="content-wrap">
+        <div class="page-header"><h2 class="page-title">AI Insights</h2><p class="page-subtitle">Automated interpretation of sequence analysis results</p></div>
+        <div class="card">
+          <div class="card-header"><span class="card-title">Analysis Summary</span></div>
+          <div id="r-aiInsights"></div>
+        </div>
+        <div class="card">
+          <div class="card-header"><span class="card-title">Ask a Question</span><span class="card-hint">Connect to AI API for answers</span></div>
+          <div class="ask-ai-box">
+            <input class="ask-ai-input" id="askAiInput" type="text" placeholder="e.g. What does the GC content suggest about this sequence?"/>
+            <button class="ask-ai-btn" onclick="handleAskAi()">Ask</button>
+          </div>
+          <div id="r-askAiResponse" style="margin-top:.75rem;font-size:.83rem;color:var(--text-muted);line-height:1.6"></div>
+        </div>
+      </div>
+    </div><!-- /tab-aiinsights -->
+
+    <!-- ELI5 -->
+    <div id="tab-eli5" class="tab-content hidden">
+      <div class="content-wrap">
+      <div class="page-header"><h2 class="page-title">Plain Language Explanations</h2><p class="page-subtitle">Simplified explanations of your sequence results</p></div>
+      <div class="card">
+        <div class="card-header"><span class="card-title">Explanations</span></div>
+        <button class="btn-secondary" id="eli5Btn" onclick="loadEli5()">Generate Explanation</button>
+        <div id="r-eli5" style="margin-top:1rem"></div>
+      </div>
+      </div>
+    </div><!-- /tab-eli5 -->
+
+  </main>
+</div>
+
+<script src="/static/app.js"></script>
+
+<!-- Floating AI Assistant -->
+<button class="ai-fab" id="aiFab" onclick="toggleAiPanel()" title="Chat with Armaani">
+  <img src="/static/armaan2.png" alt="Armaan" class="ai-fab-avatar"/>
+</button>
+
+<div class="ai-chat-panel" id="aiChatPanel">
+  <div class="ai-chat-header">
+    <div class="ai-chat-header-left">
+      <img src="/static/armaan2.png" alt="Armaan" class="ai-avatar"/>
+      <div>
+        <div class="ai-chat-name">Armaani</div>
+        <div class="ai-chat-role">AI Bioinformatics Assistant</div>
+      </div>
+    </div>
+    <button class="ai-chat-close" onclick="toggleAiPanel()">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
+        <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+      </svg>
+    </button>
+  </div>
+  <div class="ai-chat-messages" id="aiChatMessages">
+    <div class="ai-msg ai">
+      <div class="ai-msg-bubble">Paste a DNA sequence and run an analysis — I'll help you interpret the results.</div>
+    </div>
+  </div>
+  <div class="ai-chat-input-row">
+    <input class="ai-chat-input" id="aiChatInput" type="text" placeholder="Ask about your sequence..." onkeydown="if(event.key==='Enter')sendAiMessage()"/>
+    <button class="ai-chat-send" onclick="sendAiMessage()">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
+        <line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/>
+      </svg>
+    </button>
+  </div>
+</div>
+</body>
+</html>
